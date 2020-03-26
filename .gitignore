@@ -34,3 +34,4 @@
 # Devc++ files
 *.dev
 *.layout
+Makefile.*
