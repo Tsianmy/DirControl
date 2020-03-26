@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+# Devc++ files
+*.dev
+*.layout
