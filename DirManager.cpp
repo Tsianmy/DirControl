@@ -53,7 +53,7 @@ string DirManager::get_date()
 bool DirManager::fignore(string & file)
 {
 	for(unordered_map<string, bool>::iterator it = map_ignore.begin(); it != map_ignore.end(); it++){
-		if(file.find(file) != string::npos) return 1;
+		if(file.find(it->first) != string::npos) return 1;
 	}
 	return 0;
 }
