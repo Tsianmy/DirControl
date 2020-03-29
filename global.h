@@ -8,6 +8,6 @@ const string ignfile = savedir + "/ignore.txt";
 const string lsdir = savedir + "/ls";
 const string headfile = savedir + "/head.txt";
 const string hisfile = savedir + "/history.txt";
-const string exp = "=23456789ABCDEFGHJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const string exp = "=123456789ABCDEFGHJKLMNOPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 #endif
