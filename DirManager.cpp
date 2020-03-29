@@ -1,9 +1,10 @@
 #include "DirManager.h"
 #include "global.h"
+#include "gzip/compress.hpp"
+#include "gzip/decompress.hpp"
 #include <fstream>
 #include <sstream>
 #include <ctime>
-#include <chrono> 
 #include <iomanip>
 #include <windows.h>
 #include <io.h>
@@ -15,7 +16,7 @@ void DirManager::get_files(string path)
     string p;
     if ((hFile = _findfirst(p.assign(path).append("\\*").c_str(), &fileinfo)) != -1){
         do{
-            if(fileinfo.attrib &  _A_SUBDIR){
+            if (fileinfo.attrib &  _A_SUBDIR){
                 if (strcmp(fileinfo.name, ".") != 0 && strcmp(fileinfo.name, "..") != 0 && !map_ignore.count(fileinfo.name))
                     get_files(p.assign(path).append("\\").append(fileinfo.name));
             }
@@ -29,8 +30,8 @@ void DirManager::get_files(string path)
 
 void DirManager::copy_file(const string & src, const string & dst)
 {
-	ifstream is(src);
-	ofstream os(dst);
+	ifstream is(src, ios::binary);
+	ofstream os(dst, ios::binary);
 	os << is.rdbuf();
 	is.close();
 	os.close();
@@ -60,47 +61,48 @@ void DirManager::init()
 	CreateDirectory(lsdir.c_str(), 0);
 	// get date
 	stringstream ss;
-    time_t t = chrono::system_clock::to_time_t(chrono::system_clock::now());
+    time_t t = time(0);
     tm * ltm = localtime(&t);
     ss << put_time(ltm, "%Y-%m-%d %H:%M:%S");
 	log("[start time] " + ss.str() + "\n");
 	ss.str("");
-	ss << put_time(ltm, "%y%m%d%H%M%S");
+	ss << put_time(ltm, "%y%m%d") << exp[ltm->tm_hour] << exp[ltm->tm_min] << exp[ltm->tm_sec]; 
 	newhead = ss.str();
 	// load ignore files
 	map_ignore[savedir] = 1;
 	fstream fs(ignfile, ios::in);
-	string file;
+	string str;
 	if(fs.is_open()){
-		while(getline(fs, file)){
-			if(file.length() > 0) map_ignore[file] = 1;
+		while(getline(fs, str)){
+			if(str.length() > 0) map_ignore[str] = 1;
 		}
 	}
 	else fs.open(ignfile, ios::out);
 	fs.close();
 	// get new files
 	ss.str("");
-	fs.open(newfile, ios::out);
 	clock_t start = clock();
 	get_files(".");
 	for(set<string>::iterator it = set_new.begin(); it != set_new.end(); it++){
-		fs << *it << endl;
+		ss << *it << endl;
 	}
+	str = ss.str();
+	str = gzip::compress(str.c_str(), str.size());
+	fs.open(newfile, ios::out | ios::binary);
+	fs << str;
+	ss.str("");
 	ss << "#get " << set_new.size() << " newfiles with " << clock() - start << " ms." << endl;
 	log(ss.str());
 	fs.close();
 	// load history
 	fs.open(hisfile, ios::in);
 	if(fs.is_open()){
-		while(getline(fs, file)) set_his.insert(file);
+		while(getline(fs, str)) set_his.insert(str);
 	}
 	fs.close();
 	// load head
 	fs.open(headfile, ios::in);
-	if(fs.is_open()){
-		fs >> head;
-		curr = head;
-	}
+	if(fs.is_open()) fs >> curr;
 	else update();
 	fs.close();
 }
@@ -111,18 +113,22 @@ void DirManager::diff()
 	vec_new.clear();
 	set<string> set_curr = set_new;
 	
-	string lsfile = lsdir + "/" + curr + ".txt";
-	fstream fs(lsfile, ios::in);
+	string lsfile = lsdir + "/" + curr;
+	fstream fs(lsfile, ios::in | ios::binary);
 	stringstream ss;
+	ss << fs.rdbuf();
+	fs.close();
+	string str = ss.str();
+	ss.str(gzip::decompress(str.c_str(), str.size()));
 	clock_t start = clock();
-	string file;
-	while(getline(fs, file)){
-		if(set_curr.count(file)) set_curr.erase(file);
-		else vec_del.push_back(file);
+	while(getline(ss, str)){
+		if(set_curr.count(str)) set_curr.erase(str);
+		else vec_del.push_back(str);
 	}
+	ss.clear();
+	ss.str("");
 	ss << "#read files with " << clock() - start << " ms." << endl;
 	log(ss.str());
-	fs.close();
 	
 	for(set<string>::iterator it = set_curr.begin(); it != set_curr.end(); it++){
 		vec_new.push_back(*it);
@@ -148,10 +154,11 @@ void DirManager::display_his()
 
 bool DirManager::checkout(const string & branch)
 {
-	string lsfile = lsdir + "/" + branch + ".txt";
+	string lsfile = lsdir + "/" + branch;
 	fstream fs(lsfile, ios::in);
 	if(fs.is_open()){
 		curr = branch;
+		fs.close();
 		return 1;
 	}
 	else set_his.erase(branch);
@@ -161,13 +168,15 @@ bool DirManager::checkout(const string & branch)
 bool DirManager::update()
 {
 	if(!updated){
-		string lsfile = lsdir + "/" + newhead + ".txt";
+		string lsfile = lsdir + "/" + newhead;
 		copy_file(newfile, lsfile);
-		curr = head = newhead;
+		curr = newhead;
 		set_his.insert(newhead);
 		fstream fs(headfile, ios::out);
-		fs << head;
+		fs << newhead;
 		fs.close();
+		vec_new.clear();
+		vec_del.clear();
 		updated = 1;
 		return 1;
 	}
@@ -206,7 +215,10 @@ void DirManager::run()
 			}
 			else cout << "No branch " + branch + "." << endl;
 		}
-		else if(cmd == "history"){
+		else if(cmd == "curr"){
+			cout << "Now at branch " + curr + "." << endl;
+		}
+		else if(cmd == "branch"){
 			display_his();
 		}
 		else system(line.c_str());

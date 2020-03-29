@@ -12,7 +12,7 @@ class DirManager{
 		unordered_map<string, bool> map_ignore;
 		vector<string> vec_del, vec_new;
 		set<string> set_new, set_his;
-		string curr, head, newhead;
+		string curr, newhead;
 		bool updated = 0;
 		
 		DirManager(){}
