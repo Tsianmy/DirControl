@@ -33,6 +33,5 @@
 *.app
 
 # Devc++ files
-*.dev
 *.layout
 Makefile.*

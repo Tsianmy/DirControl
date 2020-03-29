@@ -21,7 +21,21 @@ void DirManager::get_files(string path)
                     get_files(p.assign(path).append("\\").append(fileinfo.name));
             }
             else if(!map_ignore.count(fileinfo.name)){
-                set_new.insert(p.assign(path).append("\\").append(fileinfo.name).erase(0, 2));
+                set_new.emplace(p.assign(path).append("\\").append(fileinfo.name).erase(0, 2));
+            }
+        } while (_findnext(hFile, &fileinfo) == 0);
+        _findclose(hFile);
+    }
+}
+
+void DirManager::get_nodes(string path)
+{
+    long hFile = 0;
+    struct _finddata_t fileinfo;
+    if ((hFile = _findfirst(path.append("/*").c_str(), &fileinfo)) != -1){
+        do{
+            if (!(fileinfo.attrib &  _A_SUBDIR)){
+                set_his.emplace(fileinfo.name);
             }
         } while (_findnext(hFile, &fileinfo) == 0);
         _findclose(hFile);
@@ -44,7 +58,7 @@ void DirManager::log(const string str)
 	os.close();
 }
 
-bool DirManager::fignore(string & file)
+bool DirManager::fignore(const string & file)
 {
 	for(unordered_map<string, bool>::iterator it = map_ignore.begin(); it != map_ignore.end(); it++){
 		if(file.find(it->first) != string::npos) return 1;
@@ -79,7 +93,7 @@ void DirManager::init()
 	}
 	else fs.open(ignfile, ios::out);
 	fs.close();
-	cout << "get new files..." << endl;
+	cout << "get new files..." << endl << endl;
 	// get new files
 	ss.str("");
 	clock_t start = clock();
@@ -96,14 +110,14 @@ void DirManager::init()
 	log(ss.str());
 	fs.close();
 	// load history
-	fs.open(hisfile, ios::in);
-	if(fs.is_open()){
-		while(getline(fs, str)) set_his.insert(str);
-	}
-	fs.close();
+	get_nodes(lsdir);
 	// load head
 	fs.open(headfile, ios::in);
-	if(fs.is_open()) fs >> curr;
+	if(fs.is_open() && set_his.size()){
+		fs >> head;
+		if(!set_his.count(head)) head = *set_his.rbegin();
+		curr = head;
+	}
 	else update();
 	fs.close();
 }
@@ -121,10 +135,11 @@ void DirManager::diff()
 	fs.close();
 	string str = ss.str();
 	ss.str(gzip::decompress(str.c_str(), str.size()));
+	
 	clock_t start = clock();
 	while(getline(ss, str)){
 		if(set_curr.count(str)) set_curr.erase(str);
-		else vec_del.push_back(str);
+		else vec_del.emplace_back(str);
 	}
 	ss.clear();
 	ss.str("");
@@ -132,7 +147,7 @@ void DirManager::diff()
 	log(ss.str());
 	
 	for(set<string>::iterator it = set_curr.begin(); it != set_curr.end(); it++){
-		vec_new.push_back(*it);
+		vec_new.emplace_back(*it);
 	}
 }
 
@@ -142,7 +157,7 @@ void DirManager::display_diff()
 	for(int i = 0; i < vec_del.size(); i++){
 		if(!fignore(vec_del[i])) cout << "delete: " << vec_del[i] << endl;
 	}
-	cout << endl;
+	if(vec_new.size() | vec_del.size()) cout << endl;
 }
 
 void DirManager::display_his()
@@ -159,24 +174,40 @@ void DirManager::display_help()
 		 << "diff" << endl
 		 << "update" << endl
 		 << "curr" << endl
-		 << "branch" << endl
+		 << "head" << endl
+		 << "nodes" << endl
 		 << "switch" << endl
+		 << "erase" << endl
 		 << "help" << endl
 		 << "exit" << endl
 		 << "*dos_commands" << endl;
 }
 
-bool DirManager::checkout(const string & branch)
+bool DirManager::checkout(const string & node)
 {
-	string lsfile = lsdir + "/" + branch;
+	string lsfile = lsdir + "/" + node;
 	fstream fs(lsfile, ios::in);
 	if(fs.is_open()){
-		curr = branch;
+		curr = node;
 		fs.close();
 		return 1;
 	}
-	else set_his.erase(branch);
+	else set_his.erase(node);
 	return 0;
+}
+
+bool DirManager::erase(const string & node)
+{
+	if(node == newhead) return 0;
+	string lsfile = lsdir + "/" + node;
+	DeleteFile(lsfile.c_str());
+	set_his.erase(node);
+	if(set_his.size()){
+		if(curr == node) curr = *set_his.rbegin();
+		if(head == node) head = *set_his.rbegin();
+	}
+	else update();
+	return 1;
 }
 
 bool DirManager::update()
@@ -184,8 +215,8 @@ bool DirManager::update()
 	if(!updated){
 		string lsfile = lsdir + "/" + newhead;
 		copy_file(newfile, lsfile);
-		curr = newhead;
-		set_his.insert(newhead);
+		curr = head = newhead;
+		set_his.emplace(newhead);
 		fstream fs(headfile, ios::out);
 		fs << newhead;
 		fs.close();
@@ -214,27 +245,47 @@ void DirManager::run()
 		if(cmd == "exit") break;
 		else if(cmd == "update"){
 			bool success = update();
-			if(success) cout << "done." << endl << "Now at branch " + curr + "." << endl;
+			if(success) cout << "done." << endl << "Now at node " + curr + "." << endl;
 			else cout << "Nothing to update." << endl;
 		}
 		else if(cmd == "diff"){
 			display_diff();
 		}
 		else if(cmd == "switch"){
-			string branch;
-			ss >> branch;
-			bool success = checkout(branch);
-			if(success){
-				diff();
-				cout << "Now at branch " + branch + "." << endl;
+			string node;
+			ss >> node;
+			if(node == "head") node = head;
+			if(curr != node){
+				bool success = checkout(node);
+				if(success){
+					diff();
+					cout << "Now at node " + node + "." << endl;
+				}
+				else cout << "No node " + node + "." << endl;
 			}
-			else cout << "No branch " + branch + "." << endl;
 		}
 		else if(cmd == "curr"){
-			cout << "Now at branch " + curr + "." << endl;
+			cout << "Now at node " + curr + "." << endl;
 		}
-		else if(cmd == "branch"){
+		else if(cmd == "head"){
+			cout << head << endl;
+		}
+		else if(cmd == "nodes"){
 			display_his();
+		}
+		else if(cmd == "erase"){
+			string node;
+			while(ss >> node){
+				if(node == "curr") node = curr;
+				else if(node == "head") node = head;
+				bool success = erase(node);
+				if(success){
+					cout << "done. ";
+					if(curr == newhead) cout << "Now at new head " + curr + "." << endl;
+					else cout << "Now at node " + curr + "." << endl;
+				}
+				else cout << "ERROR: erase " << node << " failed." << endl;
+			}
 		}
 		else if(cmd == "help"){
 			display_help();
@@ -243,12 +294,17 @@ void DirManager::run()
 	}
 }
 
-void DirManager::save_his()
+void DirManager::save()
 {
+	//save history
 	fstream fs(hisfile, ios::out);
 	for(set<string>::iterator it = set_his.begin(); it != set_his.end(); it++){
 		fs << *it << endl;
 	}
+	fs.close();
+	//save head
+	fs.open(headfile, ios::out);
+	fs << head;
 	fs.close();
 }
 
@@ -256,5 +312,5 @@ DirManager::~DirManager()
 {
 	log("\n");
 	DeleteFile(newfile.c_str());
-	save_his();
+	save();
 }
