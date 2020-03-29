@@ -20,6 +20,7 @@ class DirManager{
 		void diff();
 		void display_diff();
 		void display_his();
+		void display_help();
 		bool checkout(const string & branch);
 		bool update();
 		void copy_file(const string & src, const string & dst);

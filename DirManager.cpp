@@ -79,6 +79,7 @@ void DirManager::init()
 	}
 	else fs.open(ignfile, ios::out);
 	fs.close();
+	cout << "get new files..." << endl;
 	// get new files
 	ss.str("");
 	clock_t start = clock();
@@ -152,6 +153,19 @@ void DirManager::display_his()
 	}
 }
 
+void DirManager::display_help()
+{
+	cout << "[command_list]" << endl
+		 << "diff" << endl
+		 << "update" << endl
+		 << "curr" << endl
+		 << "branch" << endl
+		 << "switch" << endl
+		 << "help" << endl
+		 << "exit" << endl
+		 << "*dos_commands" << endl;
+}
+
 bool DirManager::checkout(const string & branch)
 {
 	string lsfile = lsdir + "/" + branch;
@@ -185,6 +199,7 @@ bool DirManager::update()
 
 void DirManager::run()
 {
+	cout << "# Input 'help' to get information #" << endl << endl;
 	init();
 	diff();
 	display_diff();
@@ -220,6 +235,9 @@ void DirManager::run()
 		}
 		else if(cmd == "branch"){
 			display_his();
+		}
+		else if(cmd == "help"){
+			display_help();
 		}
 		else system(line.c_str());
 	}
