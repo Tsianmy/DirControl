@@ -176,8 +176,8 @@ void DirManager::display_help()
 		 << "curr" << endl
 		 << "head" << endl
 		 << "nodes" << endl
-		 << "switch" << endl
-		 << "erase" << endl
+		 << "switch <node>" << endl
+		 << "erase <node>" << endl
 		 << "help" << endl
 		 << "exit" << endl
 		 << "*dos_commands" << endl;
